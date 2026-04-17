@@ -1,0 +1,2 @@
+metrics.json is generated at runtime by collector.py and analyzer.py.
+It is excluded from git via .gitignore.

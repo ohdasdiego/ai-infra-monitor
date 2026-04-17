@@ -1,0 +1,14 @@
+[Unit]
+Description=AI Infra Monitor API
+After=network.target
+
+[Service]
+User=YOUR_LINUX_USER
+WorkingDirectory=/home/YOUR_LINUX_USER/ai-infra-monitor
+EnvironmentFile=/home/YOUR_LINUX_USER/ai-infra-monitor/.env
+ExecStart=/home/YOUR_LINUX_USER/ai-infra-monitor/venv/bin/gunicorn api:app --bind 127.0.0.1:5000 --workers 2
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

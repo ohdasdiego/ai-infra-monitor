@@ -1,0 +1,728 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>AI Infra Monitor</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:       #111111;
+      --panel:    #181818;
+      --card:     #1f1f1f;
+      --border:   #2a2a2a;
+      --border2:  #333333;
+      --orange:   #ff6b00;
+      --orange2:  #ff8c00;
+      --orange-dim: rgba(255,107,0,0.12);
+      --orange-glow: rgba(255,107,0,0.25);
+      --green:    #73bf69;
+      --yellow:   #f5a623;
+      --red:      #f2495c;
+      --text:     #d9d9d9;
+      --muted:    #686868;
+      --muted2:   #888888;
+      --font:     'Inter', 'Segoe UI', system-ui, sans-serif;
+      --mono:     'JetBrains Mono', 'Fira Code', 'Courier New', monospace;
+    }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: var(--font);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      font-size: 13px;
+    }
+
+    /* ── Header ─────────────────────────────────────────── */
+    header {
+      background: var(--panel);
+      border-bottom: 1px solid var(--border);
+      padding: 0 1.5rem;
+      height: 48px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      position: sticky;
+      top: 0;
+      z-index: 10;
+    }
+
+    .logo {
+      display: flex;
+      align-items: center;
+      gap: 0.6rem;
+    }
+
+    .logo-icon {
+      width: 28px; height: 28px;
+      background: var(--orange);
+      border-radius: 5px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 0.9rem;
+      box-shadow: 0 0 10px var(--orange-glow);
+    }
+
+    .logo h1 {
+      font-size: 0.95rem;
+      font-weight: 600;
+      letter-spacing: 0.01em;
+      color: var(--text);
+    }
+
+    .logo h1 span {
+      color: var(--orange);
+    }
+
+    .header-right {
+      display: flex;
+      align-items: center;
+      gap: 1.25rem;
+    }
+
+    .last-updated {
+      font-size: 0.72rem;
+      color: var(--muted);
+      font-family: var(--mono);
+    }
+
+    .live-dot {
+      display: flex;
+      align-items: center;
+      gap: 0.35rem;
+      font-size: 0.68rem;
+      color: var(--muted2);
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+    }
+
+    .live-dot::before {
+      content: '';
+      width: 6px; height: 6px;
+      border-radius: 50%;
+      background: var(--orange);
+      box-shadow: 0 0 6px var(--orange);
+      animation: blink 2s ease-in-out infinite;
+    }
+
+    @keyframes blink { 0%,100%{opacity:1} 50%{opacity:0.3} }
+
+    /* ── Status Badge ────────────────────────────────────── */
+    .status-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.35rem;
+      padding: 0.2rem 0.65rem;
+      border-radius: 3px;
+      font-size: 0.68rem;
+      font-weight: 700;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      border: 1px solid transparent;
+      transition: all 0.3s ease;
+      font-family: var(--mono);
+      cursor: pointer;
+      user-select: none;
+    }
+    .status-badge:hover { filter: brightness(1.2); }
+
+    .status-badge.green  { background: rgba(115,191,105,0.1); color: var(--green); border-color: rgba(115,191,105,0.25); }
+    .status-badge.yellow { background: rgba(245,166,35,0.1); color: var(--yellow); border-color: rgba(245,166,35,0.25); }
+    .status-badge.red    { background: rgba(242,73,92,0.1); color: var(--red); border-color: rgba(242,73,92,0.25); }
+    .status-badge.unknown{ background: rgba(104,104,104,0.1); color: var(--muted2); border-color: rgba(104,104,104,0.25); }
+
+    .pulse { width: 6px; height: 6px; border-radius: 50%; }
+    .green  .pulse { background: var(--green); box-shadow: 0 0 0 0 rgba(115,191,105,0.6); animation: pg 2s infinite; }
+    .yellow .pulse { background: var(--yellow); box-shadow: 0 0 0 0 rgba(245,166,35,0.6); animation: py 2s infinite; }
+    .red    .pulse { background: var(--red); box-shadow: 0 0 0 0 rgba(242,73,92,0.6); animation: pr 1s infinite; }
+    .unknown .pulse { background: var(--muted); animation: none; }
+
+    @keyframes pg { 0%,100%{box-shadow:0 0 0 0 rgba(115,191,105,0.6)} 70%{box-shadow:0 0 0 6px rgba(115,191,105,0)} }
+    @keyframes py { 0%,100%{box-shadow:0 0 0 0 rgba(245,166,35,0.6)}  70%{box-shadow:0 0 0 6px rgba(245,166,35,0)} }
+    @keyframes pr { 0%,100%{box-shadow:0 0 0 0 rgba(242,73,92,0.6)}   50%{box-shadow:0 0 0 6px rgba(242,73,92,0)} }
+
+    /* ── Layout ──────────────────────────────────────────── */
+    main {
+      flex: 1;
+      padding: 1.25rem 1.5rem;
+      max-width: 1500px;
+      width: 100%;
+      margin: 0 auto;
+    }
+
+    .section-label {
+      font-size: 0.68rem;
+      font-weight: 600;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: var(--muted);
+      margin-bottom: 0.6rem;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    .section-label::after {
+      content: '';
+      flex: 1;
+      height: 1px;
+      background: var(--border);
+    }
+
+    /* ── AI Analysis Panel ───────────────────────────────── */
+    .ai-panel {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-left: 2px solid var(--orange);
+      border-radius: 4px;
+      padding: 1rem 1.25rem;
+      margin-bottom: 1.25rem;
+      position: relative;
+    }
+
+    .ai-panel-header {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      margin-bottom: 0.6rem;
+    }
+
+    .ai-tag {
+      font-size: 0.62rem;
+      font-weight: 700;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: var(--orange);
+      background: var(--orange-dim);
+      border: 1px solid rgba(255,107,0,0.2);
+      padding: 0.15rem 0.45rem;
+      border-radius: 3px;
+      font-family: var(--mono);
+    }
+
+    .ai-headline {
+      font-size: 0.92rem;
+      font-weight: 500;
+      color: var(--text);
+      margin-bottom: 0.4rem;
+      line-height: 1.4;
+    }
+
+    .ai-summary {
+      font-size: 0.8rem;
+      color: var(--muted2);
+      line-height: 1.65;
+      margin-bottom: 0.9rem;
+    }
+
+    .ai-lists {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 1rem;
+    }
+
+    @media (max-width: 640px) { .ai-lists { grid-template-columns: 1fr; } }
+
+    .ai-list-section h4 {
+      font-size: 0.62rem;
+      font-weight: 700;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: var(--muted);
+      margin-bottom: 0.4rem;
+      font-family: var(--mono);
+    }
+
+    .ai-list-section ul { list-style: none; display: flex; flex-direction: column; gap: 0.28rem; }
+
+    .ai-list-section li {
+      font-size: 0.78rem;
+      color: var(--text);
+      display: flex;
+      gap: 0.4rem;
+      align-items: flex-start;
+      line-height: 1.4;
+    }
+
+    .ai-list-section li::before { content: "▸"; color: var(--orange); flex-shrink: 0; font-size: 0.65rem; margin-top: 0.1rem; }
+    .empty-list { font-size: 0.78rem; color: var(--muted); font-style: italic; }
+
+    /* ── Metric Cards ────────────────────────────────────── */
+    .metrics-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 0.75rem;
+      margin-bottom: 1.25rem;
+    }
+
+    .metric-card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      padding: 1rem 1.1rem;
+      transition: border-color 0.2s, box-shadow 0.2s;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .metric-card::before {
+      content: '';
+      position: absolute;
+      top: 0; left: 0; right: 0;
+      height: 2px;
+      background: var(--orange);
+      opacity: 0;
+      transition: opacity 0.2s;
+    }
+
+    .metric-card:hover { border-color: var(--border2); box-shadow: 0 0 12px rgba(0,0,0,0.4); }
+    .metric-card:hover::before { opacity: 1; }
+
+    .metric-label {
+      font-size: 0.67rem;
+      font-weight: 600;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: var(--muted);
+      margin-bottom: 0.5rem;
+      font-family: var(--mono);
+    }
+
+    .metric-value {
+      font-size: 2.1rem;
+      font-weight: 700;
+      line-height: 1;
+      margin-bottom: 0.4rem;
+      font-variant-numeric: tabular-nums;
+      font-family: var(--mono);
+      letter-spacing: -0.02em;
+    }
+
+    .metric-value.green  { color: var(--green); }
+    .metric-value.yellow { color: var(--yellow); }
+    .metric-value.red    { color: var(--red); text-shadow: 0 0 12px rgba(242,73,92,0.4); }
+    .metric-value.neutral{ color: var(--orange2); }
+
+    .metric-sub {
+      font-size: 0.72rem;
+      color: var(--muted);
+      margin-bottom: 0.65rem;
+      font-family: var(--mono);
+    }
+
+    .progress-track {
+      height: 3px;
+      background: var(--border2);
+      border-radius: 999px;
+      overflow: hidden;
+    }
+
+    .progress-fill {
+      height: 100%;
+      border-radius: 999px;
+      transition: width 0.6s ease, background-color 0.4s;
+    }
+
+    .progress-fill.green  { background: var(--green); box-shadow: 0 0 6px rgba(115,191,105,0.4); }
+    .progress-fill.yellow { background: var(--yellow); box-shadow: 0 0 6px rgba(245,166,35,0.4); }
+    .progress-fill.red    { background: var(--red); box-shadow: 0 0 6px rgba(242,73,92,0.5); }
+
+    /* ── Chart Card ──────────────────────────────────────── */
+    .chart-card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      padding: 1rem 1.1rem;
+      margin-bottom: 1.25rem;
+    }
+
+    .chart-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 0.75rem;
+    }
+
+    .chart-title {
+      font-size: 0.67rem;
+      font-weight: 600;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: var(--muted);
+      font-family: var(--mono);
+    }
+
+    .chart-legend {
+      font-size: 0.65rem;
+      color: var(--orange);
+      font-family: var(--mono);
+      display: flex;
+      align-items: center;
+      gap: 0.3rem;
+    }
+
+    .chart-legend::before {
+      content: '';
+      width: 12px; height: 2px;
+      background: var(--orange);
+      border-radius: 1px;
+    }
+
+    canvas { width: 100% !important; }
+
+    /* ── Disk Table ──────────────────────────────────────── */
+    .disk-table {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      overflow: hidden;
+      margin-bottom: 1.25rem;
+    }
+
+    .disk-row {
+      display: grid;
+      grid-template-columns: 150px 1fr 100px 60px;
+      gap: 1rem;
+      align-items: center;
+      padding: 0.65rem 1.1rem;
+      border-bottom: 1px solid var(--border);
+      font-size: 0.78rem;
+      transition: background 0.15s;
+    }
+
+    .disk-row:hover:not(.header) { background: rgba(255,255,255,0.02); }
+    .disk-row:last-child { border-bottom: none; }
+
+    .disk-row.header {
+      color: var(--muted);
+      font-size: 0.65rem;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      background: rgba(0,0,0,0.2);
+      font-family: var(--mono);
+    }
+
+    .disk-mount { font-family: var(--mono); color: var(--orange2); font-size: 0.78rem; }
+    .disk-pct { text-align: right; font-weight: 700; font-family: var(--mono); }
+    .disk-size { color: var(--muted2); font-family: var(--mono); font-size: 0.75rem; }
+
+    /* ── Footer ──────────────────────────────────────────── */
+    footer {
+      text-align: center;
+      padding: 0.75rem;
+      font-size: 0.68rem;
+      color: var(--muted);
+      border-top: 1px solid var(--border);
+      font-family: var(--mono);
+    }
+
+    footer a { color: var(--orange); text-decoration: none; opacity: 0.8; }
+    footer a:hover { opacity: 1; }
+
+    .loading { color: var(--muted); font-size: 0.8rem; padding: 1.5rem; text-align: center; font-family: var(--mono); }
+  </style>
+</head>
+<body>
+
+<header>
+  <div class="logo">
+    <div class="logo-icon">⬡</div>
+    <h1>AI Infra <span>Monitor</span></h1>
+  </div>
+  <div class="header-right">
+    <span class="live-dot">Live</span>
+    <span class="last-updated" id="last-updated">—</span>
+    <div class="status-badge unknown" id="status-badge" onclick="forceRefresh()" title="Click to refresh">
+      <div class="pulse"></div>
+      <span id="status-text">—</span>
+    </div>
+  </div>
+</header>
+
+<main>
+
+  <!-- AI Analysis -->
+  <div class="section-label">AI Analysis</div>
+  <div class="ai-panel" id="ai-panel">
+    <div class="ai-panel-header">
+      <span class="ai-tag">NOC Analysis</span>
+    </div>
+    <div class="ai-headline" id="ai-headline">Waiting for analysis…</div>
+    <div class="ai-summary" id="ai-summary"></div>
+    <div class="ai-lists">
+      <div class="ai-list-section">
+        <h4>Anomalies Detected</h4>
+        <ul id="ai-anomalies"><li class="empty-list">None detected</li></ul>
+      </div>
+      <div class="ai-list-section">
+        <h4>Recommendations</h4>
+        <ul id="ai-recommendations"><li class="empty-list">No action required</li></ul>
+      </div>
+    </div>
+  </div>
+
+  <!-- Metrics -->
+  <div class="section-label">System Metrics</div>
+  <div class="metrics-grid">
+    <div class="metric-card">
+      <div class="metric-label">CPU Usage</div>
+      <div class="metric-value neutral" id="cpu-value">—%</div>
+      <div class="metric-sub" id="cpu-sub">all cores avg</div>
+      <div class="progress-track"><div class="progress-fill green" id="cpu-bar" style="width:0%"></div></div>
+    </div>
+    <div class="metric-card">
+      <div class="metric-label">Memory</div>
+      <div class="metric-value neutral" id="mem-value">—%</div>
+      <div class="metric-sub" id="mem-sub">—</div>
+      <div class="progress-track"><div class="progress-fill green" id="mem-bar" style="width:0%"></div></div>
+    </div>
+    <div class="metric-card">
+      <div class="metric-label">Uptime</div>
+      <div class="metric-value neutral" id="uptime-value">—</div>
+      <div class="metric-sub">hours since boot</div>
+    </div>
+    <div class="metric-card">
+      <div class="metric-label">Processes</div>
+      <div class="metric-value neutral" id="proc-value">—</div>
+      <div class="metric-sub">running</div>
+    </div>
+    <div class="metric-card">
+      <div class="metric-label">Net Sent</div>
+      <div class="metric-value neutral" id="net-sent">— MB</div>
+      <div class="metric-sub">since boot</div>
+    </div>
+    <div class="metric-card">
+      <div class="metric-label">Net Received</div>
+      <div class="metric-value neutral" id="net-recv">— MB</div>
+      <div class="metric-sub">since boot</div>
+    </div>
+  </div>
+
+  <!-- CPU Chart -->
+  <div class="chart-card">
+    <div class="chart-header">
+      <span class="chart-title">CPU % — Last 60 min</span>
+      <span class="chart-legend">cpu_percent</span>
+    </div>
+    <canvas id="cpu-chart" height="70"></canvas>
+  </div>
+
+  <!-- Disk -->
+  <div class="section-label">Disk Usage</div>
+  <div class="disk-table">
+    <div class="disk-row header">
+      <span>Mountpoint</span><span>Usage</span><span>Used / Total</span><span style="text-align:right">%</span>
+    </div>
+    <div id="disk-rows"><div class="loading">Loading…</div></div>
+  </div>
+
+</main>
+
+<footer>
+  <a href="https://github.com/ohdasdiego" target="_blank">ohdasdiego</a> ·
+  <a href="https://github.com/ohdasdiego/ai-infra-monitor" target="_blank">GitHub</a>
+</footer>
+
+<script>
+const API = "/api/metrics";
+const REFRESH_MS = 60_000; // 1 minute, matching analyzer cron
+
+function levelColor(pct, warn = 75, crit = 90) {
+  if (pct >= crit) return "red";
+  if (pct >= warn) return "yellow";
+  return "green";
+}
+
+function drawSparkline(canvas, dataPoints) {
+  const ctx = canvas.getContext("2d");
+  const dpr = window.devicePixelRatio || 1;
+  const w = canvas.clientWidth;
+  const h = canvas.clientHeight;
+  canvas.width = w * dpr;
+  canvas.height = h * dpr;
+  ctx.scale(dpr, dpr);
+  if (!dataPoints.length) return;
+
+  const min = 0, max = 100, pad = 6;
+  const xStep = (w - pad * 2) / Math.max(dataPoints.length - 1, 1);
+
+  ctx.clearRect(0, 0, w, h);
+
+  // Grid lines
+  ctx.strokeStyle = "rgba(42,42,42,0.8)";
+  ctx.lineWidth = 1;
+  [25, 50, 75].forEach(pct => {
+    const y = h - pad - (pct / 100) * (h - pad * 2);
+    ctx.beginPath();
+    ctx.moveTo(pad, y);
+    ctx.lineTo(w - pad, y);
+    ctx.stroke();
+  });
+
+  // Y-axis labels
+  ctx.fillStyle = "rgba(104,104,104,0.7)";
+  ctx.font = `${9 * dpr / dpr}px monospace`;
+  ctx.textAlign = "left";
+  [25, 50, 75].forEach(pct => {
+    const y = h - pad - (pct / 100) * (h - pad * 2);
+    ctx.fillText(`${pct}%`, 2, y - 2);
+  });
+
+  // Gradient fill
+  const grad = ctx.createLinearGradient(0, pad, 0, h - pad);
+  grad.addColorStop(0, "rgba(255,107,0,0.25)");
+  grad.addColorStop(0.6, "rgba(255,107,0,0.08)");
+  grad.addColorStop(1, "rgba(255,107,0,0)");
+
+  ctx.beginPath();
+  dataPoints.forEach((v, i) => {
+    const x = pad + i * xStep;
+    const y = h - pad - ((v - min) / (max - min)) * (h - pad * 2);
+    i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+  });
+  ctx.lineTo(pad + (dataPoints.length - 1) * xStep, h - pad);
+  ctx.lineTo(pad, h - pad);
+  ctx.closePath();
+  ctx.fillStyle = grad;
+  ctx.fill();
+
+  // Line
+  ctx.beginPath();
+  dataPoints.forEach((v, i) => {
+    const x = pad + i * xStep;
+    const y = h - pad - ((v - min) / (max - min)) * (h - pad * 2);
+    i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+  });
+  ctx.strokeStyle = "#ff6b00";
+  ctx.lineWidth = 1.5;
+  ctx.lineJoin = "round";
+  ctx.stroke();
+
+  // Latest dot
+  const lx = pad + (dataPoints.length - 1) * xStep;
+  const ly = h - pad - ((dataPoints[dataPoints.length - 1] - min) / (max - min)) * (h - pad * 2);
+  ctx.beginPath();
+  ctx.arc(lx, ly, 3, 0, Math.PI * 2);
+  ctx.fillStyle = "#ff8c00";
+  ctx.shadowColor = "#ff6b00";
+  ctx.shadowBlur = 6;
+  ctx.fill();
+  ctx.shadowBlur = 0;
+}
+
+const STATUS_LABELS = { green: "UP", yellow: "DEGRADED", red: "DOWN", unknown: "—" };
+
+function updateBadge(status) {
+  const badge = document.getElementById("status-badge");
+  const text  = document.getElementById("status-text");
+  badge.className = `status-badge ${status || "unknown"}`;
+  text.textContent = STATUS_LABELS[status] || status?.toUpperCase() || "—";
+}
+
+async function forceRefresh() {
+  const badge = document.getElementById("status-badge");
+  badge.style.opacity = "0.5";
+  await fetchAndRender();
+  badge.style.opacity = "1";
+}
+
+function render(data) {
+  const latest   = data.latest || {};
+  const analysis = data.ai_analysis || {};
+  const history  = data.history || [];
+
+  const ts = latest.timestamp
+    ? new Date(latest.timestamp).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit', second:'2-digit'})
+    : "—";
+  document.getElementById("last-updated").textContent = ts;
+  updateBadge(analysis.status);
+
+  document.getElementById("ai-headline").textContent = analysis.headline || "No analysis yet";
+  document.getElementById("ai-summary").textContent  = analysis.summary  || "";
+
+  const renderList = (elId, items) => {
+    const el = document.getElementById(elId);
+    el.innerHTML = (!items || !items.length)
+      ? '<li class="empty-list">None</li>'
+      : items.map(i => `<li>${i}</li>`).join("");
+  };
+  renderList("ai-anomalies", analysis.anomalies);
+  renderList("ai-recommendations", analysis.recommendations);
+
+  const cpu = latest.cpu_percent ?? 0;
+  const mem = latest.memory?.percent ?? 0;
+  const cpuColor = levelColor(cpu, 80, 95);
+  const memColor = levelColor(mem, 75, 90);
+
+  document.getElementById("cpu-value").textContent = `${cpu}%`;
+  document.getElementById("cpu-value").className = `metric-value ${cpuColor}`;
+  document.getElementById("cpu-bar").style.width = `${cpu}%`;
+  document.getElementById("cpu-bar").className = `progress-fill ${cpuColor}`;
+
+  document.getElementById("mem-value").textContent = `${mem}%`;
+  document.getElementById("mem-value").className = `metric-value ${memColor}`;
+  document.getElementById("mem-sub").textContent = `${latest.memory?.used_gb ?? "—"} / ${latest.memory?.total_gb ?? "—"} GB`;
+  document.getElementById("mem-bar").style.width = `${mem}%`;
+  document.getElementById("mem-bar").className = `progress-fill ${memColor}`;
+
+  document.getElementById("uptime-value").textContent = latest.uptime_hours ?? "—";
+  document.getElementById("proc-value").textContent   = latest.process_count ?? "—";
+  document.getElementById("net-sent").textContent     = `${latest.network?.bytes_sent_mb ?? "—"} MB`;
+  document.getElementById("net-recv").textContent     = `${latest.network?.bytes_recv_mb ?? "—"} MB`;
+
+  const diskContainer = document.getElementById("disk-rows");
+  if (latest.disks && latest.disks.length) {
+    diskContainer.innerHTML = latest.disks.map(d => {
+      const c = levelColor(d.percent, 80, 90);
+      return `
+        <div class="disk-row">
+          <span class="disk-mount">${d.mountpoint}</span>
+          <div class="progress-track" style="margin-top:0">
+            <div class="progress-fill ${c}" style="width:${d.percent}%"></div>
+          </div>
+          <span class="disk-size">${d.used_gb} / ${d.total_gb} GB</span>
+          <span class="disk-pct" style="color:var(--${c})">${d.percent}%</span>
+        </div>`;
+    }).join("");
+  } else {
+    diskContainer.innerHTML = '<div class="loading">No disk data</div>';
+  }
+
+  const cpuHistory = history.map(h => h.cpu_percent).filter(v => v != null);
+  const canvas = document.getElementById("cpu-chart");
+  if (canvas && cpuHistory.length) {
+    requestAnimationFrame(() => drawSparkline(canvas, cpuHistory));
+  }
+}
+
+async function fetchAndRender() {
+  try {
+    const res  = await fetch(API);
+    const data = await res.json();
+    if (data.error) {
+      document.getElementById("ai-headline").textContent = data.error;
+    } else {
+      render(data);
+    }
+  } catch (e) {
+    document.getElementById("ai-headline").textContent = "Could not reach API — is the server running?";
+    console.error(e);
+  }
+}
+
+fetchAndRender();
+setInterval(fetchAndRender, REFRESH_MS);
+console.log(`[ai-infra-monitor] Auto-refresh every ${REFRESH_MS / 1000}s`);
+window.addEventListener("resize", () => {
+  fetch(API).then(r => r.json()).then(data => {
+    const history = (data.history || []).map(h => h.cpu_percent).filter(v => v != null);
+    if (history.length) drawSparkline(document.getElementById("cpu-chart"), history);
+  });
+});
+</script>
+</body>
+</html>

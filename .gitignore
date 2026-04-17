@@ -1,0 +1,20 @@
+# Environment — never commit secrets
+.env
+
+# Data files — generated at runtime
+data/metrics.json
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
+*.egg-info/
+
+# Logs — generated at runtime
+logs/*.log
+
+# OS
+.DS_Store
+Thumbs.db

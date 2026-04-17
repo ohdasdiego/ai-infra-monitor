@@ -1,0 +1,3 @@
+Cron job logs go here.
+collector.log — output from collector.py
+analyzer.log  — output from analyzer.py
