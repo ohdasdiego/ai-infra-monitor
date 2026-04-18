@@ -529,7 +529,7 @@
 
 <script>
 const API = "/api/metrics";
-const REFRESH_MS = 60_000; // 1 minute, matching analyzer cron
+const REFRESH_MS = 15 * 60 * 1000; // 15 minutes, matching analyzer cron
 
 function levelColor(pct, warn = 75, crit = 90) {
   if (pct >= crit) return "red";

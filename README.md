@@ -14,7 +14,7 @@ A production-grade infrastructure monitoring dashboard with AI-powered health an
 
 ## What It Does
 
-Every minute, a cron job collects live system metrics from the host server. Every minute, those metrics are sent to an **AI analysis engine**, which returns a structured health assessment. The dashboard auto-refreshes and displays everything in real time.
+Every 15 minutes, a cron job collects live system metrics from the host server. Those metrics are sent to an **AI analysis engine**, which returns a structured health assessment. The dashboard auto-refreshes and displays everything in real time.
 
 **Metrics collected:**
 - CPU usage % with trend detection (rising/falling over last 5 readings)
@@ -128,11 +128,11 @@ crontab -e
 ```
 
 ```cron
-# Collect metrics every minute
-* * * * * cd /home/YOUR_USER/ai-infra-monitor && venv/bin/python collector.py >> logs/collector.log 2>&1
+# Collect metrics every 15 minutes
+*/15 * * * * cd /home/YOUR_USER/ai-infra-monitor && venv/bin/python collector.py >> logs/collector.log 2>&1
 
-# Run AI analysis every minute
-* * * * * cd /home/YOUR_USER/ai-infra-monitor && venv/bin/python analyzer.py >> logs/analyzer.log 2>&1
+# Run AI analysis every 15 minutes (offset by 2 min to avoid overlap)
+2-59/15 * * * * cd /home/YOUR_USER/ai-infra-monitor && venv/bin/python analyzer.py >> logs/analyzer.log 2>&1
 ```
 
 ### 5. Deploy as a systemd service
