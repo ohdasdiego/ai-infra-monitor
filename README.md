@@ -64,7 +64,7 @@ Browser ──► Cloudflare (SSL/DDoS) ──► Nginx (reverse proxy) ──�
 | Layer | Technology |
 |---|---|
 | Metrics collection | Python 3, psutil |
-| AI analysis | Anthropic Claude API (`claude-sonnet-4`) |
+| AI analysis | Anthropic Claude API (`claude-haiku-4-5`) |
 | API server | Flask 3, Gunicorn |
 | Frontend | Vanilla HTML/CSS/JS — no framework, no build step |
 | Reverse proxy | Nginx |
@@ -160,22 +160,22 @@ Point Cloudflare DNS to your server IP with the orange cloud (proxied) enabled.
 
 ## Cost Analysis
 
-Understanding API cost at scale is critical for production deployments. Here's the projected spend at different polling intervals using `claude-sonnet-4` pricing ($3.00/M input tokens, $15.00/M output tokens):
+Understanding API cost at scale is critical for production deployments. Here's the projected spend at different polling intervals using `claude-haiku-4-5` pricing ($1.00/M input tokens, $5.00/M output tokens):
 
 | Interval | Calls/day | Calls/month | Input tokens/mo | Output tokens/mo | Est. cost/mo |
 |---|---|---|---|---|---|
-| Every 1 min | 1,440 | 43,200 | ~14.2M | ~10.8M | ~$204 |
-| Every 5 min | 288 | 8,640 | ~2.8M | ~2.2M | ~$41 |
-| **Every 15 min** | **96** | **2,880** | **~948K** | **~720K** | **~$14** |
-| Every 30 min | 48 | 1,440 | ~474K | ~360K | ~$7 |
-| Every 60 min | 24 | 720 | ~237K | ~180K | ~$4 |
+| Every 1 min | 1,440 | 43,200 | ~14.2M | ~10.8M | ~$68 |
+| Every 5 min | 288 | 8,640 | ~2.8M | ~2.2M | ~$14 |
+| Every 15 min | 96 | 2,880 | ~948K | ~720K | ~$5 |
+| **Every 30 min** | **48** | **1,440** | **~474K** | **~360K** | **~$2** |
+| Every 60 min | 24 | 720 | ~237K | ~180K | ~$1 |
 
-> **Current config:** Every 15 minutes (~$14/month). Adjust polling frequency in `crontab` to tune cost vs. freshness.
+> **Current config:** Every 30 minutes (~$2/month). Adjust polling frequency in `crontab` to tune cost vs. freshness.
 
-**Per-call breakdown (15-min interval):**
+**Per-call breakdown (30-min interval):**
 - ~329 input tokens (system prompt + metrics payload)
 - ~250 output tokens (structured JSON analysis)
-- ~$0.005 per analysis call
+- ~$0.0015 per analysis call
 
 **Scaling note:** At enterprise scale with hundreds of hosts, the right architecture would batch metrics from multiple servers into a single API call rather than one call per host — dramatically reducing per-host cost.
 
