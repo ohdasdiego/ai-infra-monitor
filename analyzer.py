@@ -17,7 +17,7 @@ load_dotenv()
 
 DATA_FILE = Path(__file__).parent / "data" / "metrics.json"
 ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY")
-MODEL = "claude-sonnet-4-20250514"
+MODEL = "claude-haiku-4-5-20251001"
 
 SYSTEM_PROMPT = """You are an AI infrastructure monitoring assistant for a Network Operations Center (NOC).
 You receive real-time system metrics from a Linux server and return a structured health analysis.
