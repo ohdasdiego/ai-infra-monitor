@@ -1,8 +1,8 @@
-# AI Infra Monitor
+# Infra Monitor
 
-A production-grade infrastructure monitoring dashboard with AI-powered health analysis. Collects live system metrics, runs automated analysis, and displays everything on a real-time dashboard.
+A production-grade infrastructure monitoring dashboard. Collects live system metrics, runs automated health analysis, and displays everything on a real-time dashboard.
 
-> Live metrics collection → AI analysis → real-time dashboard. Deployed on a Linux VPS behind Cloudflare.
+> Live metrics collection → automated analysis → real-time dashboard. Deployed on a Linux VPS behind Cloudflare.
 
 ---
 
@@ -14,7 +14,7 @@ A production-grade infrastructure monitoring dashboard with AI-powered health an
 
 ## What It Does
 
-Every 15 minutes, a cron job collects live system metrics from the host server. Those metrics are sent to an **AI analysis engine**, which returns a structured health assessment. The dashboard auto-refreshes and displays everything in real time.
+Every 30 minutes, a cron job collects live system metrics from the host server. Those metrics are run through an automated analysis engine, which returns a structured health assessment. The dashboard auto-refreshes and displays everything in real time.
 
 **Metrics collected:**
 - CPU usage % with trend detection (rising/falling over last 5 readings)
@@ -23,10 +23,10 @@ Every 15 minutes, a cron job collects live system metrics from the host server. 
 - Network I/O (cumulative sent/received)
 - System uptime and process count
 
-**AI analysis output:**
+**Analysis output:**
 - **Status:** `green` / `yellow` / `red` with thresholds (CPU >80% = yellow, >95% = red, etc.)
 - **Headline:** one-sentence plain-English summary
-- **Plain-English narrative** for on-call analysts
+- **Plain-English narrative** for on-call engineers
 - **Anomalies detected** (specific deviations from baseline)
 - **Recommended actions**
 
@@ -36,26 +36,26 @@ Every 15 minutes, a cron job collects live system metrics from the host server. 
 
 ```
 VPS
-├── collector.py       # cron (every 1 min) — psutil metrics → data/metrics.json
-├── analyzer.py        # cron (every 5 min) — metrics → Claude API → AI analysis
+├── collector.py       # cron (every 30 min) — psutil metrics → data/metrics.json
+├── analyzer.py        # cron (every 30 min) — metrics → analysis engine → structured report
 ├── api.py             # Flask/Gunicorn — serves /api/metrics, /api/status, /health
 ├── templates/
 │   └── index.html     # live dashboard (vanilla JS, no framework, no build step)
 └── data/
-    └── metrics.json   # rolling 60-snapshot history + latest AI analysis
+    └── metrics.json   # rolling 60-snapshot history + latest analysis
 ```
 
 ```
 Browser ──► Cloudflare (SSL/DDoS) ──► Nginx (reverse proxy) ──► Gunicorn:5000
                                                                        │
-                                                               Claude API (Anthropic)
+                                                               Analysis Engine (API)
 ```
 
 **Key design decisions:**
 - Gunicorn binds to `127.0.0.1:5000` only — never exposed directly
 - Nginx handles all public traffic; Cloudflare sits in front for SSL termination and DDoS protection
 - Metrics stored as flat JSON — no database dependency, simple and auditable
-- AI analysis decoupled from collection — analyzer failures don't break the dashboard
+- Analysis decoupled from collection — analyzer failures don't break the dashboard
 
 ---
 
@@ -64,7 +64,7 @@ Browser ──► Cloudflare (SSL/DDoS) ──► Nginx (reverse proxy) ──�
 | Layer | Technology |
 |---|---|
 | Metrics collection | Python 3, psutil |
-| AI analysis | Anthropic Claude API (`claude-haiku-4-5`) |
+| Analysis engine | Anthropic Claude API (`claude-haiku-4-5`) |
 | API server | Flask 3, Gunicorn |
 | Frontend | Vanilla HTML/CSS/JS — no framework, no build step |
 | Reverse proxy | Nginx |
@@ -80,7 +80,7 @@ Browser ──► Cloudflare (SSL/DDoS) ──► Nginx (reverse proxy) ──�
 | Endpoint | Description |
 |---|---|
 | `GET /` | Live dashboard UI |
-| `GET /api/metrics` | Full metrics payload + AI analysis + 60-snapshot history |
+| `GET /api/metrics` | Full metrics payload + analysis + 60-snapshot history |
 | `GET /api/status` | Lightweight health check (status, headline, key metrics) |
 | `GET /health` | Liveness probe |
 
@@ -112,7 +112,7 @@ cp .env.example .env
 python collector.py
 # → [timestamp] Collected — CPU: X% | MEM: Y% | Processes: Z
 
-# Run AI analysis
+# Run analysis
 python analyzer.py
 # → Status: GREEN — All systems operating within normal parameters
 
@@ -128,11 +128,11 @@ crontab -e
 ```
 
 ```cron
-# Collect metrics every 15 minutes
-*/15 * * * * cd /home/YOUR_USER/ai-infra-monitor && venv/bin/python collector.py >> logs/collector.log 2>&1
+# Collect metrics every 30 minutes
+*/30 * * * * cd /home/YOUR_USER/ai-infra-monitor && venv/bin/python collector.py >> logs/collector.log 2>&1
 
-# Run AI analysis every 15 minutes (offset by 2 min to avoid overlap)
-2-59/15 * * * * cd /home/YOUR_USER/ai-infra-monitor && venv/bin/python analyzer.py >> logs/analyzer.log 2>&1
+# Run analysis every 30 minutes (offset by 2 min to avoid overlap)
+2-59/30 * * * * cd /home/YOUR_USER/ai-infra-monitor && venv/bin/python analyzer.py >> logs/analyzer.log 2>&1
 ```
 
 ### 5. Deploy as a systemd service
@@ -149,8 +149,8 @@ sudo systemctl start infra-monitor
 
 ```bash
 # Edit nginx.conf — replace YOUR_DOMAIN with your domain
-sudo cp nginx.conf /etc/nginx/sites-available/ai-infra-monitor
-sudo ln -s /etc/nginx/sites-available/ai-infra-monitor /etc/nginx/sites-enabled/
+sudo cp nginx.conf /etc/nginx/sites-available/infra-monitor
+sudo ln -s /etc/nginx/sites-available/infra-monitor /etc/nginx/sites-enabled/
 sudo nginx -t && sudo systemctl reload nginx
 ```
 
@@ -187,7 +187,7 @@ This project is intentionally production-aligned — not a local toy:
 
 - **Linux systems ops** — systemd service management, cron scheduling, process supervision, log routing
 - **Infrastructure monitoring** — real metric collection from a live host, rolling history, threshold-based alerting logic
-- **AI/API integration** — structured prompting, JSON schema enforcement, error handling, API key hygiene
+- **API integration** — structured prompting, JSON schema enforcement, error handling, API key hygiene
 - **Network operations** — Nginx reverse proxy config, Cloudflare integration, UFW firewall hardening, port exposure management
 - **Incident analysis mindset** — status levels, anomaly detection, plain-English summaries for on-call engineers
 - **Security hygiene** — secrets in `.env` (gitignored), gunicorn bound to loopback only, Cloudflare as the public face
