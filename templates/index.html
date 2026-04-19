@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>AI Infra Monitor</title>
+  <title>Infra Monitor</title>
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -172,7 +172,7 @@
       background: var(--border);
     }
 
-    /* ── AI Analysis Panel ───────────────────────────────── */
+    /* ── System Analysis Panel ───────────────────────────── */
     .ai-panel {
       background: var(--panel);
       border: 1px solid var(--border);
@@ -431,7 +431,7 @@
 <header>
   <div class="logo">
     <div class="logo-icon">⬡</div>
-    <h1>AI Infra <span>Monitor</span></h1>
+    <h1>Infra <span>Monitor</span></h1>
   </div>
   <div class="header-right">
     <span class="live-dot">Live</span>
@@ -445,11 +445,11 @@
 
 <main>
 
-  <!-- AI Analysis -->
-  <div class="section-label">AI Analysis</div>
+  <!-- System Analysis -->
+  <div class="section-label">System Analysis</div>
   <div class="ai-panel" id="ai-panel">
     <div class="ai-panel-header">
-      <span class="ai-tag">NOC Analysis</span>
+      <span class="ai-tag">Health Report</span>
     </div>
     <div class="ai-headline" id="ai-headline">Waiting for analysis…</div>
     <div class="ai-summary" id="ai-summary"></div>
@@ -716,7 +716,7 @@ async function fetchAndRender() {
 
 fetchAndRender();
 setInterval(fetchAndRender, REFRESH_MS);
-console.log(`[ai-infra-monitor] Auto-refresh every ${REFRESH_MS / 1000}s`);
+console.log(`[infra-monitor] Auto-refresh every ${REFRESH_MS / 1000}s`);
 window.addEventListener("resize", () => {
   fetch(API).then(r => r.json()).then(data => {
     const history = (data.history || []).map(h => h.cpu_percent).filter(v => v != null);
