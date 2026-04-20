@@ -26,9 +26,78 @@ Every 15 minutes, a cron job collects live system metrics from the host server. 
 **AI analysis output:**
 - **Status:** `green` / `yellow` / `red` with thresholds (CPU >80% = yellow, >95% = red, etc.)
 - **Headline:** one-sentence plain-English summary
-- **Plain-English narrative** for on-call analysts
+- **Plain-English narrative** for on-call engineers
 - **Anomalies detected** (specific deviations from baseline)
 - **Recommended actions**
+
+---
+
+## Sample Output
+
+### Collector Log
+
+```
+$ tail -f logs/collector.log
+
+[06:45:01] Collected — CPU: 12.4% | MEM: 74.2% | Processes: 142
+[07:00:01] Collected — CPU: 13.1% | MEM: 74.8% | Processes: 144
+[07:15:01] Collected — CPU: 11.8% | MEM: 73.9% | Processes: 141
+```
+
+### Analyzer Output (Green)
+
+```
+$ python analyzer.py
+
+Status: GREEN — All systems operating within normal parameters.
+```
+
+### Analyzer Output (Degraded)
+
+```
+$ python analyzer.py
+
+Status: YELLOW — Elevated memory usage detected. Monitor for further increase.
+```
+
+### API Response — `/api/status`
+
+```json
+{
+  "status": "green",
+  "headline": "All systems operating within normal parameters.",
+  "cpu_percent": 12.4,
+  "memory_percent": 74.2,
+  "disk_percent": 41.0,
+  "uptime_hours": 312.7,
+  "process_count": 142,
+  "timestamp": "2026-04-20T07:00:01+00:00"
+}
+```
+
+### API Response — `/api/metrics` (truncated)
+
+```json
+{
+  "latest": {
+    "cpu_percent": 12.4,
+    "memory": { "percent": 74.2, "used_gb": 0.74, "total_gb": 1.0 },
+    "disks": [{ "mountpoint": "/", "percent": 41.0 }],
+    "network": { "sent_mb": 1842.3, "recv_mb": 4201.7 },
+    "uptime_hours": 312.7,
+    "process_count": 142,
+    "timestamp": "2026-04-20T07:00:01+00:00"
+  },
+  "analysis": {
+    "status": "green",
+    "headline": "All systems operating within normal parameters.",
+    "narrative": "CPU is well within normal range at 12.4%. Memory at 74.2% is elevated but stable — typical for a 1GB VPS running multiple services. Disk usage at 41% provides adequate headroom. No anomalies detected.",
+    "anomalies": [],
+    "recommendations": ["Continue monitoring memory trend over the next few cycles."]
+  },
+  "history": [ ... ]
+}
+```
 
 ---
 
@@ -36,8 +105,8 @@ Every 15 minutes, a cron job collects live system metrics from the host server. 
 
 ```
 VPS
-├── collector.py       # cron (every 1 min) — psutil metrics → data/metrics.json
-├── analyzer.py        # cron (every 5 min) — metrics → Claude API → AI analysis
+├── collector.py       # cron (every 15 min) — psutil metrics → data/metrics.json
+├── analyzer.py        # cron (every 15 min, +3 min offset) — metrics → Claude API → analysis
 ├── api.py             # Flask/Gunicorn — serves /api/metrics, /api/status, /health
 ├── templates/
 │   └── index.html     # live dashboard (vanilla JS, no framework, no build step)
@@ -131,8 +200,8 @@ crontab -e
 # Collect metrics every 15 minutes
 */15 * * * * cd /home/YOUR_USER/ai-infra-monitor && venv/bin/python collector.py >> logs/collector.log 2>&1
 
-# Run AI analysis every 15 minutes (offset by 2 min to avoid overlap)
-2-59/15 * * * * cd /home/YOUR_USER/ai-infra-monitor && venv/bin/python analyzer.py >> logs/analyzer.log 2>&1
+# Run AI analysis every 15 minutes (offset by 3 min to avoid overlap)
+3-59/15 * * * * cd /home/YOUR_USER/ai-infra-monitor && venv/bin/python analyzer.py >> logs/analyzer.log 2>&1
 ```
 
 ### 5. Deploy as a systemd service
@@ -170,9 +239,9 @@ Understanding API cost at scale is critical for production deployments. Here's t
 | **Every 30 min** | **48** | **1,440** | **~474K** | **~360K** | **~$2** |
 | Every 60 min | 24 | 720 | ~237K | ~180K | ~$1 |
 
-> **Current config:** Every 30 minutes (~$2/month). Adjust polling frequency in `crontab` to tune cost vs. freshness.
+> **Current config:** Every 15 minutes (~$5/month). Adjust polling frequency in `crontab` to tune cost vs. freshness.
 
-**Per-call breakdown (30-min interval):**
+**Per-call breakdown (15-min interval):**
 - ~329 input tokens (system prompt + metrics payload)
 - ~250 output tokens (structured JSON analysis)
 - ~$0.0015 per analysis call
