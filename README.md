@@ -10,6 +10,8 @@ A production-grade infrastructure monitoring dashboard with AI-powered health an
 
 🔗 **[monitor.ado-runner.com](https://monitor.ado-runner.com)**
 
+![AI Infra Monitor Dashboard](screenshots/dashboard.jpg)
+
 ---
 
 ## What It Does
