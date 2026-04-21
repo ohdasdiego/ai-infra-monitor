@@ -265,6 +265,16 @@ This project is intentionally production-aligned — not a local toy:
 
 ---
 
+## 🗺️ Roadmap
+
+- [ ] Multi-host support — aggregate metrics from multiple servers into a single dashboard
+- [ ] Configurable alert thresholds via UI — no config file edits required
+- [ ] Email/PagerDuty notification support alongside Telegram
+- [ ] Historical trend graphs — 7-day and 30-day CPU/memory charts
+- [ ] Anomaly baseline learning — flag deviations from host-specific norms rather than fixed thresholds
+
+---
+
 ## Author
 
 **Diego Perez** · [github.com/ohdasdiego](https://github.com/ohdasdiego/ai-infra-monitor)
