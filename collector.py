@@ -23,6 +23,8 @@ def collect() -> dict:
 
     disks = []
     for part in psutil.disk_partitions(all=False):
+        if part.mountpoint.startswith("/snap/"):
+            continue
         try:
             usage = psutil.disk_usage(part.mountpoint)
             disks.append({
