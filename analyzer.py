@@ -4,6 +4,8 @@ Reads latest metrics, sends to Claude API, writes AI analysis back to metrics.js
 Run via cron every 5 minutes (less frequent than collector to manage API usage).
 """
 
+import hashlib
+import hmac
 import json
 import os
 import re
@@ -14,6 +16,11 @@ import requests
 from dotenv import load_dotenv
 
 load_dotenv()
+
+ONCALL_WEBHOOK_URL = os.getenv("ONCALL_WEBHOOK_URL", "")
+ONCALL_WEBHOOK_SECRET = os.getenv("ONCALL_WEBHOOK_SECRET", "")
+ALERT_COOLDOWN_FILE = Path(__file__).parent / "data" / "alert_state.json"
+ALERT_COOLDOWN_MINUTES = int(os.getenv("ALERT_COOLDOWN_MINUTES", "30"))
 
 DATA_FILE = Path(__file__).parent / "data" / "metrics.json"
 ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY")
@@ -124,6 +131,78 @@ def save_analysis(analysis: dict, metrics: dict):
         json.dump(metrics, f, indent=2)
 
 
+def load_alert_state() -> dict:
+    """Load cooldown state to avoid duplicate alerts."""
+    if ALERT_COOLDOWN_FILE.exists():
+        try:
+            with open(ALERT_COOLDOWN_FILE) as f:
+                return json.load(f)
+        except Exception:
+            pass
+    return {}
+
+
+def save_alert_state(state: dict):
+    with open(ALERT_COOLDOWN_FILE, "w") as f:
+        json.dump(state, f, indent=2)
+
+
+def should_alert(status: str, state: dict) -> bool:
+    """Return True if enough time has passed since last alert."""
+    if status not in ("yellow", "red"):
+        return False
+    last_alert = state.get("last_alert_at")
+    if not last_alert:
+        return True
+    try:
+        last_dt = datetime.fromisoformat(last_alert)
+        elapsed = (datetime.now(timezone.utc) - last_dt).total_seconds() / 60
+        return elapsed >= ALERT_COOLDOWN_MINUTES
+    except Exception:
+        return True
+
+
+def fire_webhook(analysis: dict, metrics: dict):
+    """POST alert to On-Call Assistant webhook."""
+    if not ONCALL_WEBHOOK_URL:
+        return
+
+    status = analysis.get("status", "green")
+    severity_map = {"red": "high", "yellow": "medium"}
+    severity = severity_map.get(status, "low")
+
+    latest = metrics.get("latest", {})
+    cpu = latest.get("cpu_percent", "?")
+    mem = latest.get("memory", {}).get("percent", "?")
+
+    payload = {
+        "title": f"Infra Monitor: {analysis.get('headline', 'Anomaly detected')}",
+        "description": (
+            f"{analysis.get('summary', '')}\n\n"
+            f"CPU: {cpu}% | Memory: {mem}%\n"
+            f"Anomalies: {', '.join(analysis.get('anomalies', []) or ['none'])}"
+        ),
+        "severity": severity,
+        "host": "claw-gateway1",
+        "metric": "multi",
+        "value": cpu
+    }
+
+    body = json.dumps(payload).encode()
+    headers = {"Content-Type": "application/json"}
+
+    if ONCALL_WEBHOOK_SECRET:
+        sig = hmac.new(ONCALL_WEBHOOK_SECRET.encode(), body, hashlib.sha256).hexdigest()
+        headers["X-Webhook-Signature"] = f"sha256={sig}"
+
+    try:
+        resp = requests.post(ONCALL_WEBHOOK_URL, data=body, headers=headers, timeout=10)
+        resp.raise_for_status()
+        print(f"Webhook fired → On-Call Assistant (incident #{resp.json().get('incident_id', '?')} created)")
+    except Exception as e:
+        print(f"Webhook failed: {e}")
+
+
 if __name__ == "__main__":
     if not ANTHROPIC_API_KEY:
         print("ERROR: ANTHROPIC_API_KEY not set in .env")
@@ -142,6 +221,25 @@ if __name__ == "__main__":
             print(f"Anomalies: {', '.join(analysis['anomalies'])}")
         if analysis["recommendations"]:
             print(f"Recommendations: {', '.join(analysis['recommendations'])}")
+
+        # Fire webhook to On-Call Assistant if status is yellow or red
+        state = load_alert_state()
+        if should_alert(analysis["status"], state):
+            fire_webhook(analysis, metrics)
+            state["last_alert_at"] = datetime.now(timezone.utc).isoformat()
+            state["last_status"] = analysis["status"]
+            save_alert_state(state)
+            print(f"Alert state updated. Next alert in {ALERT_COOLDOWN_MINUTES} min minimum.")
+        elif analysis["status"] in ("yellow", "red"):
+            print(f"Alert suppressed — cooldown active (last alert: {state.get('last_alert_at', 'unknown')})")
+        else:
+            # Green status — reset cooldown so next anomaly fires immediately
+            if state.get("last_status") in ("yellow", "red"):
+                state["last_alert_at"] = None
+                state["last_status"] = "green"
+                save_alert_state(state)
+                print("Status back to green — cooldown reset.")
+
     except Exception as e:
         print(f"Analysis failed: {e}")
         exit(1)
