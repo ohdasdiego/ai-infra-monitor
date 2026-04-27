@@ -106,7 +106,7 @@ def analyze(metrics: dict) -> dict:
         },
         json={
             "model": MODEL,
-            "max_tokens": 1000,
+            "max_tokens": 400,
             "system": SYSTEM_PROMPT,
             "messages": [{"role": "user", "content": prompt}],
         },
