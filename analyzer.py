@@ -23,8 +23,21 @@ ALERT_COOLDOWN_FILE = Path(__file__).parent / "data" / "alert_state.json"
 ALERT_COOLDOWN_MINUTES = int(os.getenv("ALERT_COOLDOWN_MINUTES", "30"))
 
 DATA_FILE = Path(__file__).parent / "data" / "metrics.json"
+SKIP_CACHE_FILE = Path(__file__).parent / "data" / "skip_cache.json"
 ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY")
 MODEL = "claude-haiku-4-5-20251001"
+
+# Cost-saving: skip Claude when metrics are stable and last status was green.
+# Thresholds — if all metrics stay within these bands, reuse the cached analysis.
+SKIP_CPU_DELTA    = float(os.getenv("SKIP_CPU_DELTA",    "10"))   # % change
+SKIP_MEM_DELTA    = float(os.getenv("SKIP_MEM_DELTA",    "8"))    # % change
+SKIP_DISK_DELTA   = float(os.getenv("SKIP_DISK_DELTA",   "5"))    # % change
+# Always call Claude at least once every N runs regardless (keeps dashboard fresh)
+SKIP_MAX_STREAK   = int(os.getenv("SKIP_MAX_STREAK",     "8"))    # ~2 hours at 15-min cron
+# Hard limits — always call Claude if any metric exceeds these
+SKIP_CPU_CEIL     = float(os.getenv("SKIP_CPU_CEIL",     "75"))   # %
+SKIP_MEM_CEIL     = float(os.getenv("SKIP_MEM_CEIL",     "80"))   # %
+SKIP_DISK_CEIL    = float(os.getenv("SKIP_DISK_CEIL",    "75"))   # %
 
 SYSTEM_PROMPT = """You are an AI infrastructure monitoring assistant for a Network Operations Center (NOC).
 You receive real-time system metrics from a Linux server and return a structured health analysis.
@@ -70,9 +83,9 @@ def build_prompt(metrics: dict) -> str:
     cpu_trend = ""
     if len(recent_cpu) >= 2:
         delta = recent_cpu[-1] - recent_cpu[0]
-        if delta > 10:
+        if delta > 20:
             cpu_trend = f" (trending UP +{delta:.1f}% over last {len(recent_cpu)} readings)"
-        elif delta < -10:
+        elif delta < -20:
             cpu_trend = f" (trending DOWN {delta:.1f}% over last {len(recent_cpu)} readings)"
 
     disk_lines = "\n".join(
@@ -131,6 +144,83 @@ def save_analysis(analysis: dict, metrics: dict):
         json.dump(metrics, f, indent=2)
 
 
+def load_skip_cache() -> dict:
+    """Load the skip-cache state (last analyzed metrics + streak counter)."""
+    if SKIP_CACHE_FILE.exists():
+        try:
+            with open(SKIP_CACHE_FILE) as f:
+                return json.load(f)
+        except Exception:
+            pass
+    return {}
+
+
+def save_skip_cache(state: dict):
+    SKIP_CACHE_FILE.parent.mkdir(parents=True, exist_ok=True)
+    with open(SKIP_CACHE_FILE, "w") as f:
+        json.dump(state, f, indent=2)
+
+
+def should_skip_claude(metrics: dict, cache: dict) -> tuple[bool, str]:
+    """
+    Returns (skip, reason).
+    Skip Claude if:
+      - Last status was green
+      - All key metrics are within stable delta bands
+      - No metric exceeds the hard ceiling
+      - Skip streak hasn't exceeded SKIP_MAX_STREAK
+    """
+    if not cache:
+        return False, "no cache"
+
+    last_status = cache.get("last_status", "")
+    if last_status != "green":
+        return False, f"last status was {last_status}"
+
+    streak = cache.get("skip_streak", 0)
+    if streak >= SKIP_MAX_STREAK:
+        return False, f"max streak reached ({streak})"
+
+    latest = metrics.get("latest", {})
+    prev   = cache.get("last_metrics", {})
+
+    if not prev:
+        return False, "no previous metrics"
+
+    cpu  = latest.get("cpu_percent", 0)
+    mem  = latest.get("memory", {}).get("percent", 0)
+    disk = max((d.get("percent", 0) for d in latest.get("disks", [])), default=0)
+
+    # Hard ceiling check — don't skip if approaching thresholds
+    if cpu  >= SKIP_CPU_CEIL:  return False, f"CPU at {cpu}% (ceil {SKIP_CPU_CEIL}%)"
+    if mem  >= SKIP_MEM_CEIL:  return False, f"Memory at {mem}% (ceil {SKIP_MEM_CEIL}%)"
+    if disk >= SKIP_DISK_CEIL: return False, f"Disk at {disk}% (ceil {SKIP_DISK_CEIL}%)"
+
+    # Delta check — skip only if metrics haven't moved much
+    prev_cpu  = prev.get("cpu", cpu)
+    prev_mem  = prev.get("mem", mem)
+    prev_disk = prev.get("disk", disk)
+
+    if abs(cpu  - prev_cpu)  > SKIP_CPU_DELTA:  return False, f"CPU delta {abs(cpu-prev_cpu):.1f}%"
+    if abs(mem  - prev_mem)  > SKIP_MEM_DELTA:  return False, f"Mem delta {abs(mem-prev_mem):.1f}%"
+    if abs(disk - prev_disk) > SKIP_DISK_DELTA: return False, f"Disk delta {abs(disk-prev_disk):.1f}%"
+
+    return True, f"stable green (streak {streak+1}/{SKIP_MAX_STREAK})"
+
+
+def update_skip_cache(cache: dict, metrics: dict, status: str, skipped: bool) -> dict:
+    latest = metrics.get("latest", {})
+    cpu  = latest.get("cpu_percent", 0)
+    mem  = latest.get("memory", {}).get("percent", 0)
+    disk = max((d.get("percent", 0) for d in latest.get("disks", [])), default=0)
+
+    cache["last_status"] = status
+    cache["last_metrics"] = {"cpu": cpu, "mem": mem, "disk": disk}
+    cache["skip_streak"] = (cache.get("skip_streak", 0) + 1) if skipped else 0
+    cache["last_updated"] = datetime.now(timezone.utc).isoformat()
+    return cache
+
+
 def load_alert_state() -> dict:
     """Load cooldown state to avoid duplicate alerts."""
     if ALERT_COOLDOWN_FILE.exists():
@@ -149,7 +239,7 @@ def save_alert_state(state: dict):
 
 def should_alert(status: str, state: dict) -> bool:
     """Return True if enough time has passed since last alert."""
-    if status not in ("yellow", "red"):
+    if status not in ("red",):
         return False
     last_alert = state.get("last_alert_at")
     if not last_alert:
@@ -212,17 +302,38 @@ if __name__ == "__main__":
     if not metrics:
         exit(1)
 
+    skip_cache = load_skip_cache()
+    skip, reason = should_skip_claude(metrics, skip_cache)
+
+    if skip:
+        # Reuse last cached analysis — update timestamp so dashboard shows fresh
+        analysis = metrics.get("ai_analysis", {})
+        if analysis:
+            analysis["analyzed_at"] = datetime.now(timezone.utc).isoformat()
+            analysis["_cache_hit"] = True
+            save_analysis(analysis, metrics)
+            print(f"[SKIP] Reusing cached analysis — {reason}")
+            print(f"Status: {analysis.get('status','?').upper()} — {analysis.get('headline','cached')}")
+            skip_cache = update_skip_cache(skip_cache, metrics, analysis.get("status", "green"), skipped=True)
+            save_skip_cache(skip_cache)
+            exit(0)
+        # No cached analysis yet — fall through to Claude
+        print("[SKIP] No cache available yet — calling Claude")
+
     print("Sending metrics to Claude for analysis...")
     try:
         analysis = analyze(metrics)
+        analysis.pop("_cache_hit", None)
         save_analysis(analysis, metrics)
+        skip_cache = update_skip_cache(skip_cache, metrics, analysis.get("status", "green"), skipped=False)
+        save_skip_cache(skip_cache)
         print(f"Status: {analysis['status'].upper()} — {analysis['headline']}")
         if analysis["anomalies"]:
             print(f"Anomalies: {', '.join(analysis['anomalies'])}")
         if analysis["recommendations"]:
             print(f"Recommendations: {', '.join(analysis['recommendations'])}")
 
-        # Fire webhook to On-Call Assistant if status is yellow or red
+        # Fire webhook to On-Call Assistant if status is red only (yellow skipped)
         state = load_alert_state()
         if should_alert(analysis["status"], state):
             fire_webhook(analysis, metrics)
@@ -230,16 +341,19 @@ if __name__ == "__main__":
             state["last_status"] = analysis["status"]
             save_alert_state(state)
             print(f"Alert state updated. Next alert in {ALERT_COOLDOWN_MINUTES} min minimum.")
-        elif analysis["status"] in ("yellow", "red"):
+        elif analysis["status"] in ("red",):
             print(f"Alert suppressed — cooldown active (last alert: {state.get('last_alert_at', 'unknown')})")
         else:
-            # Green status — reset cooldown so next anomaly fires immediately
-            if state.get("last_status") in ("yellow", "red"):
+            # Green/yellow status — reset cooldown so next red fires immediately
+            if state.get("last_status") in ("red",):
                 state["last_alert_at"] = None
                 state["last_status"] = "green"
                 save_alert_state(state)
                 print("Status back to green — cooldown reset.")
 
+    except requests.exceptions.HTTPError as e:
+        print(f"Claude API error: {e.response.status_code} — {e.response.text[:200]}")
+        exit(1)
     except Exception as e:
         print(f"Analysis failed: {e}")
         exit(1)
