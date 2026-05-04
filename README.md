@@ -8,7 +8,7 @@ A production-grade infrastructure monitoring dashboard with AI-powered health an
 
 ## Live Demo
 
- **[monitor.ado-runner.com](https://monitor.ado-runner.com)**
+🔗 **[monitor.ado-runner.com](https://monitor.ado-runner.com)**
 
 ![AI Infra Monitor Dashboard](screenshots/dashboard.jpg)
 
@@ -66,14 +66,14 @@ Status: YELLOW — Elevated memory usage detected. Monitor for further increase.
 
 ```json
 {
- "status": "green",
- "headline": "All systems operating within normal parameters.",
- "cpu_percent": 12.4,
- "memory_percent": 74.2,
- "disk_percent": 41.0,
- "uptime_hours": 312.7,
- "process_count": 142,
- "timestamp": "2026-04-20T07:00:01+00:00"
+  "status": "green",
+  "headline": "All systems operating within normal parameters.",
+  "cpu_percent": 12.4,
+  "memory_percent": 74.2,
+  "disk_percent": 41.0,
+  "uptime_hours": 312.7,
+  "process_count": 142,
+  "timestamp": "2026-04-20T07:00:01+00:00"
 }
 ```
 
@@ -81,23 +81,23 @@ Status: YELLOW — Elevated memory usage detected. Monitor for further increase.
 
 ```json
 {
- "latest": {
- "cpu_percent": 12.4,
- "memory": { "percent": 74.2, "used_gb": 0.74, "total_gb": 1.0 },
- "disks": [{ "mountpoint": "/", "percent": 41.0 }],
- "network": { "sent_mb": 1842.3, "recv_mb": 4201.7 },
- "uptime_hours": 312.7,
- "process_count": 142,
- "timestamp": "2026-04-20T07:00:01+00:00"
- },
- "analysis": {
- "status": "green",
- "headline": "All systems operating within normal parameters.",
- "narrative": "CPU is well within normal range at 12.4%. Memory at 74.2% is elevated but stable — typical for a 1GB VPS running multiple services. Disk usage at 41% provides adequate headroom. No anomalies detected.",
- "anomalies": [],
- "recommendations": ["Continue monitoring memory trend over the next few cycles."]
- },
- "history": [ ... ]
+  "latest": {
+    "cpu_percent": 12.4,
+    "memory": { "percent": 74.2, "used_gb": 0.74, "total_gb": 1.0 },
+    "disks": [{ "mountpoint": "/", "percent": 41.0 }],
+    "network": { "sent_mb": 1842.3, "recv_mb": 4201.7 },
+    "uptime_hours": 312.7,
+    "process_count": 142,
+    "timestamp": "2026-04-20T07:00:01+00:00"
+  },
+  "analysis": {
+    "status": "green",
+    "headline": "All systems operating within normal parameters.",
+    "narrative": "CPU is well within normal range at 12.4%. Memory at 74.2% is elevated but stable — typical for a 1GB VPS running multiple services. Disk usage at 41% provides adequate headroom. No anomalies detected.",
+    "anomalies": [],
+    "recommendations": ["Continue monitoring memory trend over the next few cycles."]
+  },
+  "history": [ ... ]
 }
 ```
 
@@ -107,19 +107,19 @@ Status: YELLOW — Elevated memory usage detected. Monitor for further increase.
 
 ```
 VPS
-├── collector.py # cron (every 15 min) — psutil metrics → data/metrics.json
-├── analyzer.py # cron (every 15 min, +3 min offset) — metrics → Claude API → analysis
-├── api.py # Flask/Gunicorn — serves /api/metrics, /api/status, /health
+├── collector.py       # cron (every 15 min) — psutil metrics → data/metrics.json
+├── analyzer.py        # cron (every 15 min, +3 min offset) — metrics → Claude API → analysis
+├── api.py             # Flask/Gunicorn — serves /api/metrics, /api/status, /health
 ├── templates/
-│ └── index.html # live dashboard (vanilla JS, no framework, no build step)
+│   └── index.html     # live dashboard (vanilla JS, no framework, no build step)
 └── data/
- └── metrics.json # rolling 60-snapshot history + latest AI analysis
+    └── metrics.json   # rolling 60-snapshot history + latest AI analysis
 ```
 
 ```
 Browser ──► Cloudflare (SSL/DDoS) ──► Nginx (reverse proxy) ──► Gunicorn:5000
- │
- Claude API (Anthropic)
+                                                                       │
+                                                               Claude API (Anthropic)
 ```
 
 **Key design decisions:**
@@ -265,7 +265,7 @@ This project is intentionally production-aligned — not a local toy:
 
 ---
 
-## Roadmap
+## 🗺️ Roadmap
 
 - [ ] Multi-host support — aggregate metrics from multiple servers into a single dashboard
 - [ ] Configurable alert thresholds via UI — no config file edits required
