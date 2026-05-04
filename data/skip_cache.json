@@ -1,0 +1,10 @@
+{
+  "last_status": "green",
+  "last_metrics": {
+    "cpu": 29.4,
+    "mem": 53.5,
+    "disk": 14.5
+  },
+  "skip_streak": 0,
+  "last_updated": "2026-05-04T19:33:03.851407+00:00"
+}
